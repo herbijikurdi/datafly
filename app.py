@@ -1,6 +1,7 @@
 import os
 import uuid
 import json
+import zipfile
 from flask import Flask, request, send_from_directory, redirect, render_template, url_for, flash
 
 UPLOAD_FOLDER = 'uploads'
@@ -23,23 +24,36 @@ def save_passwords(passwords):
         json.dump(passwords, f)
 
 @app.route('/', methods=['GET', 'POST'])
-def upload_file():
+def upload_files():
     if request.method == 'POST':
-        uploaded_file = request.files['file']
+        uploaded_files = request.files.getlist('files')
         password = request.form.get('password')
-        if uploaded_file.filename != '':
-            unique_id = str(uuid.uuid4())
-            filename = f"{unique_id}_{uploaded_file.filename}"
-            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            uploaded_file.save(file_path)
+        
+        if not uploaded_files or uploaded_files[0].filename == '':
+            flash("Keine Dateien ausgewählt.")
+            return redirect(request.url)
 
-            if password:
-                passwords = load_passwords()
-                passwords[filename] = password
-                save_passwords(passwords)
+        unique_id = str(uuid.uuid4())
+        zip_filename = f"{unique_id}.zip"
+        zip_path = os.path.join(app.config['UPLOAD_FOLDER'], zip_filename)
 
-            download_link = url_for('download_file', filename=filename, _external=True)
-            return render_template("index.html", download_link=download_link)
+        with zipfile.ZipFile(zip_path, 'w') as zipf:
+            for file in uploaded_files:
+                filename = file.filename
+                file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                file.save(file_path)
+                zipf.write(file_path, arcname=filename)
+                os.remove(file_path)  # temporäre Datei löschen
+
+        # Passwort speichern
+        if password:
+            passwords = load_passwords()
+            passwords[zip_filename] = password
+            save_passwords(passwords)
+
+        download_link = url_for('download_file', filename=zip_filename, _external=True)
+        return render_template("index.html", download_link=download_link)
+
     return render_template("index.html", download_link=None)
 
 @app.route('/download/<filename>', methods=['GET', 'POST'])
@@ -57,4 +71,5 @@ def download_file(filename):
         return send_from_directory(app.config['UPLOAD_FOLDER'], filename, as_attachment=True)
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=port)
