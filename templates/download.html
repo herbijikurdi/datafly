@@ -15,10 +15,11 @@
         {% endwith %}
 
         {% if password_required %}
-        <form method="post">
-            <input type="password" name="password" placeholder="Passwort eingeben" required>
-            <button type="submit">Download starten</button>
+        <form method="POST" action="/upload" enctype="multipart/form-data">
+          <input type="file" name="files" multiple>
+          <button type="submit">Hochladen</button>
         </form>
+
         {% endif %}
     </div>
 </body>
